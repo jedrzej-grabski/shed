@@ -91,7 +91,7 @@ _shed_ls() {
         printf '#\tPYTHON\tCREATED\tSIZE\tPACKAGES\n'
         local i=1
         while IFS= read -r d; do
-            local pyver="-" created="-" pkgs="(empty)" size="-"
+            local pyver="-" created="-" pkgs="(empty)" size="-" pkglist="" count=0
             size=$(du -sh "$d" 2>/dev/null | cut -f1 | tr -d ' ')
             if [[ -x "$d/.venv/bin/python" ]]; then
                 pyver=$("$d/.venv/bin/python" --version 2>&1 | awk '{print $2}')
@@ -102,7 +102,6 @@ _shed_ls() {
                 created=$(stat -c "%y" "$d" 2>/dev/null | cut -d'.' -f1)
             fi
             if [[ -d "$d/.venv" ]]; then
-                local pkglist count
                 pkglist=$(VIRTUAL_ENV="$d/.venv" uv pip list --format=freeze 2>/dev/null | cut -d= -f1)
                 count=$(printf '%s\n' "$pkglist" | grep -c .)
                 if [[ "$count" -gt 5 ]]; then
