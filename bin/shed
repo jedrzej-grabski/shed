@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# bootstrap wrapper — runs once to configure your shell
+set -euo pipefail
+
+SHED_LIB="${SHED_LIB:-$(brew --prefix 2>/dev/null)/lib/shed/shed.sh}"
+if [[ ! -f "$SHED_LIB" ]]; then
+    SHED_LIB="/usr/local/lib/shed/shed.sh"
+fi
+
+_detect_rc_file() {
+    case "$(basename "$SHELL")" in
+        zsh)  echo "${ZDOTDIR:-$HOME}/.zshrc" ;;
+        bash)
+            if [[ -f "$HOME/.bash_profile" ]]; then
+                echo "$HOME/.bash_profile"
+            else
+                echo "$HOME/.bashrc"
+            fi
+            ;;
+        *)    echo "$HOME/.profile" ;;
+    esac
+}
+
+_already_hooked() {
+    local rc="$1"
+    [[ -f "$rc" ]] && grep -qF 'shed --init' "$rc"
+}
+
+rc_file=$(_detect_rc_file)
+
+if _already_hooked "$rc_file"; then
+    echo "⚠️  shed is already in $rc_file but hasn't been loaded in this shell."
+    echo ""
+    echo "   Run: source $rc_file"
+    echo "   Or just open a new terminal, then use shed normally."
+    exit 1
+fi
+
+echo ""
+echo "🐍 First-time setup for shed!"
+echo ""
+read -rp "Add shed to $rc_file? [Y/n] " answer
+answer="${answer:-Y}"
+
+if [[ "$answer" =~ ^[Yy]$ ]]; then
+    printf '\n# shed - ephemeral python workspaces\neval "$(shed --init)"\n' >> "$rc_file"
+    echo "✅ Added to $rc_file"
+    echo ""
+    echo "Now run:"
+    echo "   source $rc_file"
+    echo ""
+    echo "Then you're good to go:"
+    echo "   shed -v=3.12 numpy matplotlib"
+else
+    echo ""
+    echo "No worries. Add this manually when you're ready:"
+    echo ""
+    echo '   eval "$(shed --init)"'
+    echo ""
+fi
