@@ -2,6 +2,16 @@
 # bootstrap wrapper — runs once to configure your shell
 set -euo pipefail
 
+# If called with --init, just dump the library to stdout
+if [[ "${1:-}" == "--init" ]]; then
+    SHED_LIB="${SHED_LIB:-$(brew --prefix 2>/dev/null)/lib/shed/shed.sh}"
+    if [[ ! -f "$SHED_LIB" ]]; then
+        SHED_LIB="/usr/local/lib/shed/shed.sh"
+    fi
+    cat "$SHED_LIB"
+    exit 0
+fi
+
 SHED_LIB="${SHED_LIB:-$(brew --prefix 2>/dev/null)/lib/shed/shed.sh}"
 if [[ ! -f "$SHED_LIB" ]]; then
     SHED_LIB="/usr/local/lib/shed/shed.sh"
