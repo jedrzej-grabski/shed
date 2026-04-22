@@ -10,7 +10,7 @@ shed() {
     case "${1:-}" in
         --init)    _shed_init ;;
         -h|--help) _shed_help ;;
-        ls)        shift; _shed_ls "$@" ;;
+        ls|list)   shift; _shed_ls "$@" ;;
         switch)    shift; _shed_switch "$@" ;;
         clean)     shift; _shed_clean "$@" ;;
         new)       shift; _shed_new "$@" ;;
@@ -142,7 +142,7 @@ Usage:
 
 Commands:
   new [options] [packages...]       Create a new shed
-  ls                                List active sheds
+  ls, list                          List active sheds
   switch <n>                        Switch to shed #n from 'shed ls'
   clean                             Remove all shed directories
 
