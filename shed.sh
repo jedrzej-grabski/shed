@@ -12,6 +12,7 @@ shed() {
         -h|--help) _shed_help ;;
         ls|list)   shift; _shed_ls "$@" ;;
         switch)    shift; _shed_switch "$@" ;;
+        leave)     shift; _shed_leave "$@" ;;
         clean)     shift; _shed_clean "$@" ;;
         new)       shift; _shed_new "$@" ;;
         *)         _shed_new "$@" ;;
@@ -49,6 +50,7 @@ _shed_new() {
     local dir
     dir=$(mktemp -d "${SHED_DIR_PREFIX}-XXXXXX") || { echo "❌ Failed to create temp dir"; return 1; }
     echo "🐍 Shed created: $dir"
+    _shed_remember_prev
     cd "$dir" || return 1
 
     local venv_args=(-q .venv)
@@ -85,32 +87,34 @@ _shed_ls() {
         echo "No active sheds"
         return 0
     fi
-    echo "Active sheds:"
-    local i=1
-    while IFS= read -r d; do
-        local pyver="?" created="?" pkgs="(none)" size
-        size=$(du -sh "$d" 2>/dev/null | cut -f1)
-        if [[ -x "$d/.venv/bin/python" ]]; then
-            pyver=$("$d/.venv/bin/python" --version 2>&1 | awk '{print $2}')
-        fi
-        if stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$d" &>/dev/null; then
-            created=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$d")
-        else
-            created=$(stat -c "%y" "$d" 2>/dev/null | cut -d'.' -f1)
-        fi
-        if [[ -d "$d/.venv" ]]; then
-            local pkglist count
-            pkglist=$(VIRTUAL_ENV="$d/.venv" uv pip list --format=freeze 2>/dev/null | cut -d= -f1)
-            count=$(printf '%s\n' "$pkglist" | grep -c .)
-            if [[ "$count" -gt 5 ]]; then
-                pkgs="$(printf '%s\n' "$pkglist" | head -5 | tr '\n' ' ')..."
-            elif [[ "$count" -gt 0 ]]; then
-                pkgs=$(printf '%s\n' "$pkglist" | tr '\n' ' ')
+    {
+        printf '#\tPYTHON\tCREATED\tSIZE\tPACKAGES\n'
+        local i=1
+        while IFS= read -r d; do
+            local pyver="-" created="-" pkgs="(empty)" size="-"
+            size=$(du -sh "$d" 2>/dev/null | cut -f1 | tr -d ' ')
+            if [[ -x "$d/.venv/bin/python" ]]; then
+                pyver=$("$d/.venv/bin/python" --version 2>&1 | awk '{print $2}')
             fi
-        fi
-        printf "  [%d] %s\n       py %s · %s · %s\n       %s\n" "$i" "$d" "$pyver" "$created" "$size" "$pkgs"
-        i=$((i+1))
-    done <<< "$sheds"
+            if stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$d" &>/dev/null; then
+                created=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$d")
+            else
+                created=$(stat -c "%y" "$d" 2>/dev/null | cut -d'.' -f1)
+            fi
+            if [[ -d "$d/.venv" ]]; then
+                local pkglist count
+                pkglist=$(VIRTUAL_ENV="$d/.venv" uv pip list --format=freeze 2>/dev/null | cut -d= -f1)
+                count=$(printf '%s\n' "$pkglist" | grep -c .)
+                if [[ "$count" -gt 5 ]]; then
+                    pkgs="$(printf '%s\n' "$pkglist" | head -5 | paste -sd ' ' -) ..."
+                elif [[ "$count" -gt 0 ]]; then
+                    pkgs=$(printf '%s\n' "$pkglist" | paste -sd ' ' -)
+                fi
+            fi
+            printf '%d\t%s\t%s\t%s\t%s\n' "$i" "$pyver" "$created" "$size" "$pkgs"
+            i=$((i+1))
+        done <<< "$sheds"
+    } | column -t -s $'\t'
 }
 
 _shed_switch() {
@@ -126,10 +130,33 @@ _shed_switch() {
         echo "❌ No shed #$num (use 'shed ls')"
         return 1
     fi
+    _shed_remember_prev
     cd "$target" || return 1
     # shellcheck disable=SC1091
     source .venv/bin/activate
     echo "🐍 Switched to shed #$num: $target"
+}
+
+_shed_remember_prev() {
+    # Only capture pwd if we're not already inside a shed, so repeated
+    # switches still return to the original dir.
+    case "$PWD" in
+        "${SHED_DIR_PREFIX}"-*) return 0 ;;
+    esac
+    SHED_PREV_DIR="$PWD"
+}
+
+_shed_leave() {
+    case "$PWD" in
+        "${SHED_DIR_PREFIX}"-*) ;;
+        *) echo "Not currently in a shed"; return 1 ;;
+    esac
+    if declare -F deactivate &>/dev/null; then
+        deactivate
+    fi
+    local dest="${SHED_PREV_DIR:-$HOME}"
+    cd "$dest" || return 1
+    echo "🐍 Left shed, back in $dest"
 }
 
 _shed_help() {
@@ -144,6 +171,7 @@ Commands:
   new [options] [packages...]       Create a new shed
   ls, list                          List active sheds
   switch <n>                        Switch to shed #n from 'shed ls'
+  leave                             Return to pre-shed dir, deactivate venv
   clean                             Remove all shed directories
 
 Options (for new):
