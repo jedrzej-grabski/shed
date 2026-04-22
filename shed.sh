@@ -69,7 +69,7 @@ _shed_new() {
 
 _shed_clean() {
     local count
-    count=$(find /tmp -maxdepth 1 -name "shed-*" -type d 2>/dev/null | wc -l | tr -d ' ')
+    count=$(find -L /tmp -maxdepth 1 -name "shed-*" -type d 2>/dev/null | wc -l | tr -d ' ')
     if [[ "$count" -eq 0 ]]; then
         echo "🧹 No sheds to clean up"
         return 0
@@ -80,7 +80,7 @@ _shed_clean() {
 
 _shed_ls() {
     local sheds
-    sheds=$(find /tmp -maxdepth 1 -name "shed-*" -type d 2>/dev/null | sort)
+    sheds=$(find -L /tmp -maxdepth 1 -name "shed-*" -type d 2>/dev/null | sort)
     if [[ -z "$sheds" ]]; then
         echo "No active sheds"
         return 0
@@ -120,7 +120,7 @@ _shed_switch() {
         return 1
     fi
     local sheds target
-    sheds=$(find /tmp -maxdepth 1 -name "shed-*" -type d 2>/dev/null | sort)
+    sheds=$(find -L /tmp -maxdepth 1 -name "shed-*" -type d 2>/dev/null | sort)
     target=$(printf '%s\n' "$sheds" | sed -n "${num}p")
     if [[ -z "$target" ]]; then
         echo "❌ No shed #$num (use 'shed ls')"
