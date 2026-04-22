@@ -7,16 +7,27 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]] && [[ "${1:-}" == "--init" ]]; then
 fi
 
 shed() {
-    if [[ "${1:-}" == "--init" ]]; then
-        local self
-        self="$(command -v shed 2>/dev/null || echo "/usr/local/lib/shed/shed.sh")"
-        if head -1 "$self" 2>/dev/null | grep -q "bootstrap"; then
-            self="${self%/bin/shed}/lib/shed/shed.sh"
-        fi
-        cat "$self"
-        return 0
-    fi
+    case "${1:-}" in
+        --init)    _shed_init ;;
+        -h|--help) _shed_help ;;
+        ls)        shift; _shed_ls "$@" ;;
+        switch)    shift; _shed_switch "$@" ;;
+        clean)     shift; _shed_clean "$@" ;;
+        new)       shift; _shed_new "$@" ;;
+        *)         _shed_new "$@" ;;
+    esac
+}
 
+_shed_init() {
+    local self
+    self="$(command -v shed 2>/dev/null || echo "/usr/local/lib/shed/shed.sh")"
+    if head -1 "$self" 2>/dev/null | grep -q "bootstrap"; then
+        self="${self%/bin/shed}/lib/shed/shed.sh"
+    fi
+    cat "$self"
+}
+
+_shed_new() {
     if ! command -v uv &>/dev/null; then
         echo "❌ uv is required but not installed."
         echo "   Install it: curl -LsSf https://astral.sh/uv/install.sh | sh"
@@ -56,7 +67,7 @@ shed() {
     fi
 }
 
-shed-clean() {
+_shed_clean() {
     local count
     count=$(find /tmp -maxdepth 1 -name "shed-*" -type d 2>/dev/null | wc -l | tr -d ' ')
     if [[ "$count" -eq 0 ]]; then
@@ -67,19 +78,58 @@ shed-clean() {
     echo "🧹 Swept away $count shed(s)"
 }
 
-shed-ls() {
+_shed_ls() {
     local sheds
-    sheds=$(find /tmp -maxdepth 1 -name "shed-*" -type d 2>/dev/null)
+    sheds=$(find /tmp -maxdepth 1 -name "shed-*" -type d 2>/dev/null | sort)
     if [[ -z "$sheds" ]]; then
         echo "No active sheds"
         return 0
     fi
     echo "Active sheds:"
+    local i=1
     while IFS= read -r d; do
-        local size
+        local pyver="?" created="?" pkgs="(none)" size
         size=$(du -sh "$d" 2>/dev/null | cut -f1)
-        echo "  $d ($size)"
+        if [[ -x "$d/.venv/bin/python" ]]; then
+            pyver=$("$d/.venv/bin/python" --version 2>&1 | awk '{print $2}')
+        fi
+        if stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$d" &>/dev/null; then
+            created=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$d")
+        else
+            created=$(stat -c "%y" "$d" 2>/dev/null | cut -d'.' -f1)
+        fi
+        if [[ -d "$d/.venv" ]]; then
+            local pkglist count
+            pkglist=$(VIRTUAL_ENV="$d/.venv" uv pip list --format=freeze 2>/dev/null | cut -d= -f1)
+            count=$(printf '%s\n' "$pkglist" | grep -c .)
+            if [[ "$count" -gt 5 ]]; then
+                pkgs="$(printf '%s\n' "$pkglist" | head -5 | tr '\n' ' ')..."
+            elif [[ "$count" -gt 0 ]]; then
+                pkgs=$(printf '%s\n' "$pkglist" | tr '\n' ' ')
+            fi
+        fi
+        printf "  [%d] %s\n       py %s · %s · %s\n       %s\n" "$i" "$d" "$pyver" "$created" "$size" "$pkgs"
+        i=$((i+1))
     done <<< "$sheds"
+}
+
+_shed_switch() {
+    local num="${1:-}"
+    if [[ -z "$num" || ! "$num" =~ ^[0-9]+$ ]]; then
+        echo "Usage: shed switch <number>"
+        return 1
+    fi
+    local sheds target
+    sheds=$(find /tmp -maxdepth 1 -name "shed-*" -type d 2>/dev/null | sort)
+    target=$(printf '%s\n' "$sheds" | sed -n "${num}p")
+    if [[ -z "$target" ]]; then
+        echo "❌ No shed #$num (use 'shed ls')"
+        return 1
+    fi
+    cd "$target" || return 1
+    # shellcheck disable=SC1091
+    source .venv/bin/activate
+    echo "🐍 Switched to shed #$num: $target"
 }
 
 _shed_help() {
@@ -87,21 +137,26 @@ _shed_help() {
 shed - Ephemeral Python workspaces powered by uv 🐍
 
 Usage:
-  shed [options] [packages...]
-
-Options:
-  -v=VERSION, --version=VERSION   Python version (e.g. 3.12, 3.11)
-  -h, --help                      Show this help
-  --init                          Print shell init script (for eval)
+  shed [options] [packages...]      Create a new shed (same as 'shed new')
+  shed <command> [args...]
 
 Commands:
-  shed-clean                      Remove all shed directories
-  shed-ls                         List active sheds
+  new [options] [packages...]       Create a new shed
+  ls                                List active sheds
+  switch <n>                        Switch to shed #n from 'shed ls'
+  clean                             Remove all shed directories
+
+Options (for new):
+  -v=VERSION, --version=VERSION     Python version (e.g. 3.12, 3.11)
+  -h, --help                        Show this help
+  --init                            Print shell init script (for eval)
 
 Examples:
-  shed                            # quick workspace, default python
-  shed numpy requests             # install packages on creation
-  shed -v=3.12 flask              # use python 3.12 + flask
-  shed -v=3.12 numpy matplotlib; code .
+  shed                              # quick workspace, default python
+  shed numpy requests               # install packages on creation
+  shed -v=3.12 flask                # use python 3.12 + flask
+  shed ls                           # list active sheds
+  shed switch 2                     # jump into shed #2
+  shed clean                        # sweep them all away
 HELP
 }

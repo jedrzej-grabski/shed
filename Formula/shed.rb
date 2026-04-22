@@ -1,7 +1,7 @@
 class Shed < Formula
   desc "Ephemeral Python workspaces powered by uv"
-  homepage "https://github.com/YOURUSER/shed"
-  url "https://github.com/YOURUSER/shed/archive/refs/tags/v0.1.0.tar.gz"
+  homepage "https://github.com/jedrzej-grabski/shed"
+  url "https://github.com/jedrzej-grabski/shed/archive/refs/tags/v0.1.0.tar.gz"
   sha256 "UPDATE_AFTER_RELEASE"
   license "MIT"
 
